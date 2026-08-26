@@ -99,13 +99,13 @@
 }
 
 .warn {
-  color: var(--dsw-alias-label-error, rgb(217 48 37));
+  color: var(--dsw-alias-state-error-primary);
 }
 
 /* The low-balance tint is the one place this readout changes color to make a point, so it applies to
    the trigger and to the figure it is about — never to the whole panel. */
 .low {
-  color: var(--dsw-alias-label-error, rgb(217 48 37));
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .refresh {
