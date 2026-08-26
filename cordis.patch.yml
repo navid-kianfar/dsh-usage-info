@@ -1,0 +1,43 @@
+# dsh-usage-info — context occupancy and account balance for the DeepSeek Harness Web Client.
+#
+# The Consumer and its browser surface are always composed; the balance provider is not, because it
+# needs a deployment-specific answer (which endpoint, and which environment variable holds its key)
+# that no default can safely supply. With no provider mounted the readout still shows context
+# occupancy and the settings card says why the balance is missing, so an unconfigured install shows
+# no dead control and loses no working one.
+#
+# Only ONE provider may be mounted: a second row claiming `ctx.accountBalance` fails loudly at load
+# rather than picking one. Override any row from your profile's own cordis.patch.yml by `id`,
+# restating every key the row needs — a patch replaces a row's whole `config`.
+- insert:
+    - id: usage-info
+      name: '@achasoft/dsh-usage-info/host'
+      config:
+        showContext: true
+        showBalance: true
+        # How often each browser re-asks. The provider is not asked this often: a poll landing inside
+        # cacheTtlMs is answered from the Host's shared reading, so open tabs cost nothing extra.
+        refreshIntervalMs: 300000
+        # Must not exceed refreshIntervalMs, or every poll would be served a reading already older
+        # than the cadence it was scheduled at. The Host refuses that combination at load.
+        cacheTtlMs: 240000
+        # An exact decimal string, compared digit-wise against each amount in its own currency.
+        # Commented out because the right number is a currency and a spending rate this plugin cannot
+        # guess; uncomment and set one to turn the low-balance warning on.
+        # lowBalanceThreshold: '10.00'
+
+    # The BARE package name, deliberately: the Web Client discovers a browser half by resolving
+    # `<row name>/package.json`, so a subpath row here would leave the header seat silently unserved.
+    - id: usage-info-ui
+      name: '@achasoft/dsh-usage-info'
+
+    - id: usage-info-deepseek
+      name: '@achasoft/dsh-usage-info/deepseek'
+      disabled: true
+      config:
+        baseURL: https://api.deepseek.com
+        # The NAME of an environment variable, never the key. It defaults to the same reference the
+        # harness's own DeepSeek adapter uses, so an installation that can already call the model can
+        # already read its balance.
+        apiKeyEnv: DEEPSEEK_API_KEY
+        timeoutMs: 15000

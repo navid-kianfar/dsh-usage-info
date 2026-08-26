@@ -1,0 +1,67 @@
+/* The usage-info card on the plugin settings tab. Every control writes straight through the bound
+   settings scope, so there is no save/discard chrome to style. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--dsw-alias-border-l3, rgb(0 0 0 / 10%));
+  border-radius: 12px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.description,
+.status {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary, inherit);
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid currentcolor;
+}
+
+.ready {
+  color: var(--dsw-alias-label-success, rgb(26 127 55));
+}
+
+.notReady {
+  color: var(--dsw-alias-label-error, rgb(217 48 37));
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.label {
+  font-size: 13px;
+}
+
+.control {
+  min-width: 220px;
+}
+
+.toggle {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dsw-alias-brand-primary);
+}
