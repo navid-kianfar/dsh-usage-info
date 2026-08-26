@@ -35,9 +35,14 @@ export const zh = {
   'settings.status.ready': '就绪',
   'settings.status.notReady': '未就绪',
   'settings.showContext': '显示上下文占用',
+  'settings.showContext.hint': '在会话标题栏显示上下文窗口的占用比例。',
   'settings.showBalance': '显示账户余额',
+  'settings.showBalance.hint': '在会话标题栏显示账户余额。关闭后不再请求余额接口。',
   'settings.refreshInterval': '刷新间隔（秒）',
-  'settings.lowBalanceThreshold': '低余额提示阈值（留空关闭）',
+  'settings.refreshInterval.hint': '浏览器重新读取余额的间隔。多个标签页共用服务端缓存，因此不会成倍增加接口请求。',
+  'settings.lowBalanceThreshold': '低余额提示',
+  'settings.lowBalanceThreshold.hint': '余额低于或等于该值时高亮提示。留空则不提示。',
+  'settings.lowBalanceThreshold.invalid': '请输入精确的十进制数字，例如 10.00。',
 } satisfies Record<string, string>
 
 /** The usageInfo namespace key union. */
@@ -78,7 +83,12 @@ export const en = {
   'settings.status.ready': 'Ready',
   'settings.status.notReady': 'Not ready',
   'settings.showContext': 'Show context occupancy',
+  'settings.showContext.hint': 'Show how full the model’s context window is in the session header.',
   'settings.showBalance': 'Show account balance',
+  'settings.showBalance.hint': 'Show the account balance in the session header. Off stops asking the provider entirely.',
   'settings.refreshInterval': 'Refresh interval (seconds)',
-  'settings.lowBalanceThreshold': 'Low-balance warning at (blank disables)',
+  'settings.refreshInterval.hint': 'How often the browser re-reads the balance. Tabs share one host-side reading, so open windows do not multiply requests.',
+  'settings.lowBalanceThreshold': 'Low-balance warning',
+  'settings.lowBalanceThreshold.hint': 'Warn once the balance reaches this figure. Blank disables the warning.',
+  'settings.lowBalanceThreshold.invalid': 'Enter an exact decimal, such as 10.00.',
 } satisfies Record<UsageInfoKey, string>
