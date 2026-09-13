@@ -26,7 +26,14 @@ const _deepseek_ai_dsh_usage_info_usageInfo_describe_result$schema = z.object({
   'ready': z.boolean().readonly(),
   'detail': z.string().readonly().optional(),
   'showContext': z.boolean().readonly(),
+  'showCost': z.boolean().readonly(),
   'showBalance': z.boolean().readonly(),
+  'costRates': z.object({
+  'input': z.string().readonly(),
+  'cacheRead': z.string().readonly(),
+  'output': z.string().readonly(),
+}).readonly().optional(),
+  'costCurrency': z.string().readonly(),
   'refreshIntervalMs': z.number().readonly(),
   'lowBalanceThreshold': z.string().readonly().optional(),
 })
@@ -61,7 +68,7 @@ export const TYPERT = {
         typeSymbol: '../src/host/types.ts#UsageBalanceResult',
         schema: _deepseek_ai_dsh_usage_info_usageInfo_balance_result$schema,
       },
-      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":184,"column":9},
+      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":214,"column":9},
     },
     {
       id: '@achasoft/dsh-usage-info#usageInfo/describe',
@@ -76,7 +83,7 @@ export const TYPERT = {
         typeSymbol: '../src/host/types.ts#UsageInfoView',
         schema: _deepseek_ai_dsh_usage_info_usageInfo_describe_result$schema,
       },
-      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":148,"column":9},
+      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":173,"column":9},
     },
   ],
   model: {
@@ -130,8 +137,12 @@ export const TYPERT = {
             "declaration": "export interface UsageBalanceSuccess {\n    readonly ok: true;\n    readonly available: boolean;\n    readonly amounts: readonly UsageBalanceAmount[];\n    readonly fetchedAt: number;\n}"
           },
           {
+            "name": "UsageCostRates",
+            "declaration": "export interface UsageCostRates {\n    readonly input: string;\n    readonly cacheRead: string;\n    readonly output: string;\n}"
+          },
+          {
             "name": "UsageInfoView",
-            "declaration": "export interface UsageInfoView {\n    readonly balanceAvailable: boolean;\n    readonly provider?: string;\n    readonly endpoint?: string;\n    readonly ready: boolean;\n    readonly detail?: string;\n    readonly showContext: boolean;\n    readonly showBalance: boolean;\n    readonly refreshIntervalMs: number;\n    readonly lowBalanceThreshold?: string;\n}"
+            "declaration": "export interface UsageInfoView {\n    readonly balanceAvailable: boolean;\n    readonly provider?: string;\n    readonly endpoint?: string;\n    readonly ready: boolean;\n    readonly detail?: string;\n    readonly showContext: boolean;\n    readonly showCost: boolean;\n    readonly showBalance: boolean;\n    readonly costRates?: UsageCostRates;\n    readonly costCurrency: string;\n    readonly refreshIntervalMs: number;\n    readonly lowBalanceThreshold?: string;\n}"
           }
         ]
       }

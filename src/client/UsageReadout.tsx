@@ -7,7 +7,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type { UsageBalanceResult, UsageBalanceSuccess, UsageInfoView } from '../host/types.ts'
 import { contextOccupancy, contextParts, formatTokens } from './context.ts'
+import { sessionCost, type UsageTokens } from './cost.ts'
 import { formatAmount, formatDecimal, isLowBalance, readingAge } from './money.ts'
+import type { UsageInfoKey } from './locales.ts'
 import type { UsageReadoutInjected } from './index.ts'
 import css from './UsageReadout.module.css'
 
@@ -39,6 +41,20 @@ const PART_COLORS = {
 } as const
 
 /**
+ * The cost estimate's rows, in the order a provider bills them: what it read in full, what it stored,
+ * what it reused, and what it wrote back.
+ *
+ * Cache writes are listed even though they carry no rate of their own — a bucket that is billed at
+ * another bucket's rate still has to be legible, or a session's totals would not add up to its figure.
+ */
+const COST_ROWS = [
+  { key: 'uncachedInputTokens', label: 'cost.input' },
+  { key: 'cacheWriteTokens', label: 'cost.cacheWrite' },
+  { key: 'cacheReadTokens', label: 'cost.cacheRead' },
+  { key: 'outputTokens', label: 'cost.output' },
+] as const satisfies readonly { key: keyof UsageTokens; label: UsageInfoKey }[]
+
+/**
  * Failure classes that will not change without a configuration edit, so polling stops on them.
  *
  * `unsupported` means this base URL publishes no balance endpoint at all and `not-configured` means
@@ -66,20 +82,23 @@ function describeFailure(code: string): string {
 }
 
 /**
- * The session header's usage readout: how full the model's context window is, and what the account
- * paying for it currently holds.
+ * The session header's usage readout: how full the model's context window is, what this session has
+ * cost so far, and what the account paying for it currently holds.
  *
- * The two halves reach this component by different routes on purpose. Context occupancy is read
- * straight from the session projections the harness's token meter already publishes — no request,
- * and no second copy of numbers the Host has already folded. The balance cannot work that way: it
- * needs an API key, so it crosses one Remote call and the browser never sees the credential.
+ * The three halves reach this component by different routes on purpose. Context occupancy and the
+ * session's token totals are read straight from the session projections the harness's token meter
+ * already publishes — no request, and no second copy of numbers the Host has already folded. Cost is
+ * the token totals priced at rates the deployment configures, computed here because that is where the
+ * tokens already are. The balance cannot work that way: it needs an API key, so it crosses one Remote
+ * call and the browser never sees the credential.
  *
  * The whole readout renders nothing when it has nothing to say — no provider, no capacity reported
- * yet, both halves switched off — rather than showing a control that does not work.
+ * yet, all halves switched off — rather than showing a control that does not work.
  */
 export function UsageReadout({ useProjection, describeUsage, readBalance, t }: UsageReadoutProps) {
   const pressure = useProjection('contextPressure')
   const breakdown = useProjection('contextBreakdown')
+  const usage = useProjection('tokenUsage')
   const [view, setView] = useState<UsageInfoView | null>(null)
   const [balance, setBalance] = useState<UsageBalanceResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -158,17 +177,27 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
   }, [open])
 
   const occupancy = view?.showContext === true ? contextOccupancy(pressure) : null
+  // Reading the totals and paying for them are different facts: `sessionCost` answers null until a
+  // request has been billed, which is what keeps a brand-new session from reading as costing 0.00.
+  const billed = usage ?? null
+  const cost = billed === null || view?.costRates === undefined
+    ? null
+    : sessionCost(billed, view.costRates)
+  const showCostSection = view?.showCost === true
   const reading: UsageBalanceSuccess | null = balance?.ok === true ? balance : null
   const showBalanceSection = wantsBalance && !halted
-  // A seat with neither half to show is not a disabled control — it is no control. The header keeps
-  // its own spacing, so an empty utility renders as nothing rather than as a gap.
-  if (occupancy === null && !showBalanceSection) return null
+  // A seat with no half to show is not a disabled control — it is no control. The header keeps its own
+  // spacing, so an empty utility renders as nothing rather than as a gap.
+  if (occupancy === null && !showCostSection && !showBalanceSection) return null
 
   const primary = reading?.amounts[0]
   const low = primary !== undefined && isLowBalance(primary.total, view?.lowBalanceThreshold)
   const percentText = occupancy === null ? '' : `${occupancy.percent}%`
   const parts = contextParts(breakdown)
   const age = reading === null ? null : readingAge(reading.fetchedAt, ageNow)
+  const totalTokens = billed === null
+    ? 0
+    : billed.uncachedInputTokens + billed.cacheWriteTokens + billed.cacheReadTokens + billed.outputTokens
 
   return (
     <span ref={rootRef} className={css.root}>
@@ -258,6 +287,37 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
                         <span className={css.muted}>{t('context.approximate')}</span>
                       </>
                     )}
+                  </>
+                )}
+            </section>
+          )}
+
+          {showCostSection && (
+            <section className={css.section}>
+              <div className={css.sectionHead}>
+                <span className={css.sectionTitle}>{t('cost.title')}</span>
+                {billed !== null && (
+                  <span className={css.figures}>{formatTokens(totalTokens)}</span>
+                )}
+              </div>
+              {cost === null || billed === null
+                ? <span className={css.muted}>{t('cost.pending')}</span>
+                : (
+                  <>
+                    <span className={css.headline}>
+                      {formatAmount(view?.costCurrency ?? 'USD', cost)}
+                    </span>
+                    {/* Token counts, not money, per row: one figure is what a person is deciding
+                        against, while the rows behind it are what a provider reported. */}
+                    <dl className={css.rows}>
+                      {COST_ROWS.map(row => (
+                        <div key={row.key} className={css.row}>
+                          <dt>{t(row.label)}</dt>
+                          <dd>{formatTokens(billed[row.key])}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <span className={css.muted}>{t('cost.estimate')}</span>
                   </>
                 )}
             </section>

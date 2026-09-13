@@ -10,7 +10,10 @@ import type { UsageBalanceResult } from '../src/host/types.ts'
 /** The composition defaults, mirroring cordis.patch.yml. */
 const USAGE: UsageConfig = {
   showContext: true,
+  showCost: true,
   showBalance: true,
+  costRates: { input: '0.28', cacheRead: '0.028', output: '0.42' },
+  costCurrency: 'USD',
   refreshIntervalMs: 300_000,
   cacheTtlMs: 240_000,
 }
@@ -58,6 +61,9 @@ describe('describe()', () => {
       balanceAvailable: false,
       ready: false,
       showContext: true,
+      showCost: true,
+      costRates: { input: '0.28', cacheRead: '0.028', output: '0.42' },
+      costCurrency: 'USD',
       showBalance: true,
       refreshIntervalMs: 300_000,
     })
@@ -88,6 +94,13 @@ describe('describe()', () => {
   it('normalizes a cleared threshold to absent, so "no warning" has one spelling', async () => {
     const ctx = await boot({ usage: { lowBalanceThreshold: '' } })
     expect(await ctx.usageInfo.describe()).not.toHaveProperty('lowBalanceThreshold')
+  })
+
+  it('withholds the rates while the estimate is off, so nothing can price a hidden figure', async () => {
+    const ctx = await boot({ usage: { showCost: false } })
+    const view = await ctx.usageInfo.describe()
+    expect(view.showCost).toBe(false)
+    expect(view).not.toHaveProperty('costRates')
   })
 })
 
@@ -183,5 +196,15 @@ describe('configuration', () => {
   it('refuses a warning threshold that is not an exact decimal', async () => {
     await expect(boot({ usage: { lowBalanceThreshold: '1e2' } }))
       .rejects.toThrowError(/exact decimal/u)
+  })
+
+  it('refuses a cost rate that is not a non-negative exact decimal', async () => {
+    // A signed rate would let a session's cost fall as it spends, which is not a thing a bill does.
+    await expect(boot({ usage: { costRates: { input: '-0.28', cacheRead: '0.028', output: '0.42' } } }))
+      .rejects.toThrowError(/costRates\.input/u)
+  })
+
+  it('refuses a currency that is not an ISO 4217 code', async () => {
+    await expect(boot({ usage: { costCurrency: 'usd' } })).rejects.toThrowError(/costCurrency/u)
   })
 })

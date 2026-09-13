@@ -104,8 +104,18 @@ export interface UsageInfoView {
   readonly detail?: string
   /** Whether the deployment wants the context-occupancy figures shown. */
   readonly showContext: boolean
+  /** Whether the deployment wants the session-cost estimate shown. */
+  readonly showCost: boolean
   /** Whether the deployment wants the balance shown. */
   readonly showBalance: boolean
+  /**
+   * The rates a session's cost is estimated at, per one million tokens. Absent while {@link showCost}
+   * is false — the Host prices nothing itself, so these are carried to the browser, which is where the
+   * token totals already are.
+   */
+  readonly costRates?: UsageCostRates
+  /** ISO 4217 code the rates are quoted in, for the estimate's own currency label. */
+  readonly costCurrency: string
   /** How often the browser should re-ask for a balance, in milliseconds. */
   readonly refreshIntervalMs: number
   /**
@@ -117,14 +127,40 @@ export interface UsageInfoView {
 }
 
 /**
+ * Rates one million tokens are priced at, as exact decimal strings.
+ *
+ * Three rates, not four: cache WRITES have no rate of their own because a provider bills them as
+ * cache-miss input, and giving them a separate knob would invite a deployment to double-charge or
+ * to price a bucket that never appears in its provider's reports.
+ */
+export interface UsageCostRates {
+  /** Cache-miss input tokens, and cache writes. */
+  readonly input: string
+  /** Tokens served from the provider's prompt cache. */
+  readonly cacheRead: string
+  /** Generated tokens, reasoning included. */
+  readonly output: string
+}
+
+/**
  * The `usage-info` settings section as both halves see it: the Host validates it as its plugin
  * `Config`, and the browser card binds a settings scope to exactly this shape.
  */
 export interface UsageInfoSettings {
   /** Whether the readout shows context occupancy for the current session. */
   showContext: boolean
+  /** Whether the readout shows what the current session has cost. */
+  showCost: boolean
   /** Whether the readout shows the account balance. */
   showBalance: boolean
+  /**
+   * Rates the session-cost estimate is computed at, as exact decimals per one million tokens. The
+   * harness prices nothing, so these are the deployment's own; they are not a bill and the readout
+   * labels the figure an estimate.
+   */
+  readonly costRates: UsageCostRates
+  /** ISO 4217 code the cost rates are quoted in. */
+  readonly costCurrency: string
   /**
    * How often the browser re-asks for a balance. This is the poll cadence, not the request rate: a
    * poll inside {@link UsageInfoSettings.cacheTtlMs} is answered from the Host's cached reading

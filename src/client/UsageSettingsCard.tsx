@@ -13,6 +13,22 @@ import css from './UsageSettingsCard.module.css'
 /** An exact decimal quantity: optional sign, digits, optional fraction. */
 const DECIMAL = /^-?\d+(?:\.\d+)?$/u
 
+/** A rate: an exact decimal that cannot be negative, matching what the Host's schema accepts. */
+const RATE = /^\d+(?:\.\d+)?$/u
+
+/** An ISO 4217 code, as the Host's schema spells it. */
+const CURRENCY = /^[A-Z]{3}$/u
+
+/** The three rates, each with the dictionary key naming it. */
+const RATE_FIELDS = [
+  { key: 'input', label: 'settings.priceInput' },
+  { key: 'cacheRead', label: 'settings.priceCacheRead' },
+  { key: 'output', label: 'settings.priceOutput' },
+] as const
+
+/** One rate's name inside the `costRates` section. */
+type RateKey = typeof RATE_FIELDS[number]['key']
+
 /** Props the renderer binds for the usage settings card. */
 export type UsageSettingsCardProps =
   PropsRuntime<'settings.plugin.item'>
@@ -42,7 +58,8 @@ function Field(props: {
 
 /**
  * The usage-info card on the plugin-configuration tab: which provider answers for the balance, and
- * the four preferences a person changes.
+ * the preferences a person changes — what the readout shows, how often it re-reads the balance, when
+ * it warns, and the rates it estimates a session's cost at.
  *
  * The card reproduces the configuration section's own chrome — an `<li>` disclosure card, and fields
  * laid out label / control / hint — because it cannot import those components. The section stacks
@@ -59,6 +76,8 @@ export function UsageSettingsCard(props: UsageSettingsCardProps) {
   const [capability, setCapability] = useState<UsageInfoView | null>(null)
   const [open, setOpen] = useState(false)
   const [thresholdDraft, setThresholdDraft] = useState<string | null>(null)
+  const [currencyDraft, setCurrencyDraft] = useState<string | null>(null)
+  const [rateDraft, setRateDraft] = useState<Partial<Record<RateKey, string>>>({})
   const fieldId = useId()
   const value = settings.value
   const disabled = !settings.writable || value === undefined
@@ -79,6 +98,17 @@ export function UsageSettingsCard(props: UsageSettingsCardProps) {
   // straight through.
   const threshold = thresholdDraft ?? value?.lowBalanceThreshold ?? ''
   const thresholdInvalid = threshold !== '' && !DECIMAL.test(threshold)
+
+  // The cost fields hold drafts for the same reason the threshold does: a half-typed rate or currency
+  // is not a value the Host's schema would accept, and a rejected write leaves the field looking
+  // accepted. Each write carries the whole `costRates` section, because that is the shape the section
+  // is declared in.
+  const currency = currencyDraft ?? value?.costCurrency ?? ''
+  const currencyInvalid = currency !== '' && !CURRENCY.test(currency)
+  const writeRate = (key: RateKey, next: string): void => {
+    if (value === undefined) return
+    void setField('costRates', { ...value.costRates, [key]: next })
+  }
 
   const ready = capability?.balanceAvailable === true && capability.ready
   const providerHint = capability === null || !capability.balanceAvailable
@@ -134,6 +164,23 @@ export function UsageSettingsCard(props: UsageSettingsCardProps) {
               />
             )}
             hint={t('settings.showContext.hint')}
+          />
+
+          <Field
+            id={`${fieldId}-cost`}
+            label={t('settings.showCost')}
+            control={(
+              <input
+                id={`${fieldId}-cost`}
+                className={css.switch}
+                type="checkbox"
+                role="switch"
+                disabled={disabled}
+                checked={value?.showCost ?? true}
+                onChange={(event) => { void setField('showCost', event.target.checked) }}
+              />
+            )}
+            hint={t('settings.showCost.hint')}
           />
 
           <Field
@@ -207,6 +254,68 @@ export function UsageSettingsCard(props: UsageSettingsCardProps) {
               ? t('settings.lowBalanceThreshold.invalid')
               : t('settings.lowBalanceThreshold.hint')}
           />
+
+          <Field
+            id={`${fieldId}-currency`}
+            label={t('settings.costCurrency')}
+            control={(
+              <input
+                id={`${fieldId}-currency`}
+                className={currencyInvalid ? css.inputInvalid : css.input}
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="USD"
+                disabled={disabled}
+                {...currencyInvalid ? { 'aria-invalid': true } : {}}
+                value={currency}
+                onChange={(event) => {
+                  const next = event.target.value.toUpperCase()
+                  setCurrencyDraft(next)
+                  if (CURRENCY.test(next)) void setField('costCurrency', next)
+                }}
+              />
+            )}
+            invalid={currencyInvalid}
+            hint={currencyInvalid
+              ? t('settings.costCurrency.invalid')
+              : t('settings.costCurrency.hint')}
+          />
+
+          {RATE_FIELDS.map(({ key, label }) => {
+            const rate = rateDraft[key] ?? value?.costRates[key] ?? ''
+            const invalid = rate !== '' && !RATE.test(rate)
+            return (
+              <Field
+                key={key}
+                id={`${fieldId}-rate-${key}`}
+                label={t(label)}
+                control={(
+                  <input
+                    id={`${fieldId}-rate-${key}`}
+                    className={invalid ? css.inputInvalid : css.input}
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    disabled={disabled}
+                    {...invalid ? { 'aria-invalid': true } : {}}
+                    value={rate}
+                    onChange={(event) => {
+                      const next = event.target.value
+                      setRateDraft(current => ({ ...current, [key]: next }))
+                      if (RATE.test(next)) writeRate(key, next)
+                    }}
+                  />
+                )}
+                invalid={invalid}
+                hint={invalid
+                  ? t('settings.price.invalid')
+                  // The input rate is the one that also prices cache writes, and that is the whole
+                  // reason a session's four buckets can be summed with three rates.
+                  : key === 'input' ? t('settings.priceCacheWrite') : t('settings.price.hint')}
+              />
+            )
+          })}
         </div>
       )}
     </li>

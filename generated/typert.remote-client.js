@@ -26,7 +26,14 @@ const _deepseek_ai_dsh_usage_info_usageInfo_describe_result$schema = z.object({
   'ready': z.boolean().readonly(),
   'detail': z.string().readonly().optional(),
   'showContext': z.boolean().readonly(),
+  'showCost': z.boolean().readonly(),
   'showBalance': z.boolean().readonly(),
+  'costRates': z.object({
+  'input': z.string().readonly(),
+  'cacheRead': z.string().readonly(),
+  'output': z.string().readonly(),
+}).readonly().optional(),
+  'costCurrency': z.string().readonly(),
   'refreshIntervalMs': z.number().readonly(),
   'lowBalanceThreshold': z.string().readonly().optional(),
 })
@@ -58,7 +65,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '../src/host/types.ts#UsageBalanceResult',
         schema: _deepseek_ai_dsh_usage_info_usageInfo_balance_result$schema,
       },
-      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":184,"column":9},
+      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":214,"column":9},
     },
     {
       id: '@achasoft/dsh-usage-info#usageInfo/describe',
@@ -73,7 +80,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '../src/host/types.ts#UsageInfoView',
         schema: _deepseek_ai_dsh_usage_info_usageInfo_describe_result$schema,
       },
-      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":148,"column":9},
+      sourceLocation: {"file":"packages/usage-info/usage-info/src/index.ts","line":173,"column":9},
     },
   ],
 }

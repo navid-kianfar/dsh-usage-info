@@ -43,6 +43,12 @@ export const USAGE_INFO_SETTINGS_NAMESPACE = settingsNamespace('usage-info')
 /** An exact decimal quantity: optional sign, digits, optional fraction. */
 const DECIMAL = /^-?\d+(?:\.\d+)?$/u
 
+/** A rate: an exact decimal that cannot be negative, since no provider pays for a token. */
+const RATE = /^\d+(?:\.\d+)?$/u
+
+/** An ISO 4217 code, as the readout labels the estimate it computes from those rates. */
+const CURRENCY = /^[A-Z]{3}$/u
+
 /** Deployment configuration for the usage readout; the `usage-info` settings section's own shape. */
 export type Config = UsageInfoSettings
 
@@ -75,6 +81,18 @@ function validateConfig(value: Config): void {
       + ' would hold every poll on a reading already older than the cadence it was scheduled at',
     )
   }
+  for (const [field, rate] of Object.entries(value.costRates)) {
+    if (!RATE.test(rate)) {
+      throw new Error(
+        `usage-info: costRates.${field} must be a non-negative exact decimal string, got "${rate}"`,
+      )
+    }
+  }
+  if (!CURRENCY.test(value.costCurrency)) {
+    throw new Error(
+      `usage-info: costCurrency must be an ISO 4217 code such as USD, got "${value.costCurrency}"`,
+    )
+  }
 }
 
 /** What this service holds while a balance provider is mounted; discarded together when one is not. */
@@ -85,10 +103,17 @@ interface BoundProvider {
 
 /** Host-side balance endpoint and usage-readout settings owner. */
 export class UsageInfoService extends TypertRemoteService {
-  /** Loader validation for the two visibility flags, the two cadences, and the warning threshold. */
+  /** Loader validation for the three visibility flags, the two cadences, the warning threshold, and the cost rates. */
   static Config: z<Config> = z.object({
     showContext: z.boolean().required(),
+    showCost: z.boolean().required(),
     showBalance: z.boolean().required(),
+    costRates: z.object({
+      input: z.string().required(),
+      cacheRead: z.string().required(),
+      output: z.string().required(),
+    }).required(),
+    costCurrency: z.string().required(),
     refreshIntervalMs: z.number().step(1).min(1_000).required(),
     cacheTtlMs: z.number().step(1).min(0).required(),
     lowBalanceThreshold: z.string(),
@@ -149,6 +174,11 @@ export class UsageInfoService extends TypertRemoteService {
     const config = this.source()
     const preferences = {
       showContext: config.showContext,
+      showCost: config.showCost,
+      // Withheld while the estimate is off, so a browser that has the flag false has no rates to
+      // compute from either: the two cannot disagree about whether a cost belongs on screen.
+      ...config.showCost ? { costRates: { ...config.costRates } } : {},
+      costCurrency: config.costCurrency,
       showBalance: config.showBalance,
       refreshIntervalMs: config.refreshIntervalMs,
       // Empty is how the settings card clears the warning, and it is normalized to absent HERE so

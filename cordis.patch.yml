@@ -14,6 +14,17 @@
       name: '@achasoft/dsh-usage-info/host'
       config:
         showContext: true
+        # The session-cost estimate. The harness publishes a session's token totals but prices nothing,
+        # so these rates are the deployment's own: exact decimals per ONE MILLION tokens, in
+        # `costCurrency`. The defaults are DeepSeek's published deepseek-chat rates (cache miss, cache
+        # hit, output); set them to the model you actually run. Cache writes have no rate of their own —
+        # they are billed at the input rate, which is why three rates cover four buckets.
+        showCost: true
+        costCurrency: USD
+        costRates:
+          input: '0.28'
+          cacheRead: '0.028'
+          output: '0.42'
         showBalance: true
         # How often each browser re-asks. The provider is not asked this often: a poll landing inside
         # cacheTtlMs is answered from the Host's shared reading, so open tabs cost nothing extra.
