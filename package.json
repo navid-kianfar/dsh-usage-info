@@ -1,6 +1,6 @@
 {
   "name": "@achasoft/dsh-usage-info",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Context occupancy and account balance for the DeepSeek Harness Web Client: a session-header readout, a balance capability seam, and a DeepSeek provider",
   "license": "MIT",
   "type": "module",
