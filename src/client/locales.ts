@@ -17,7 +17,7 @@ export const zh = {
 
   'cost.title': '本会话费用',
   'cost.pending': '首次请求计费后显示',
-  'cost.estimate': '按设置的单价估算，实际以账单为准。',
+  'cost.estimate': '按设置中配置的单价估算，实际以账单为准。',
   'cost.input': '未缓存输入',
   'cost.cacheWrite': '缓存写入',
   'cost.cacheRead': '缓存读取',
@@ -59,9 +59,13 @@ export const zh = {
   'settings.showBalance.hint': '在会话标题栏显示账户余额。关闭后不再请求余额接口。',
   'settings.refreshInterval': '刷新间隔（秒）',
   'settings.refreshInterval.hint': '浏览器重新读取余额的间隔。多个标签页共用服务端缓存，因此不会成倍增加接口请求。',
+  'settings.refreshInterval.minimum': '最小为 {seconds} 秒，即服务端缓存时长；更频繁的轮询只会读到缓存。',
+  'settings.refreshInterval.invalid': '请输入整数秒。',
+  'settings.refreshInterval.belowCache': '不能小于 {seconds} 秒，即服务端缓存时长。',
   'settings.lowBalanceThreshold': '低余额提示',
   'settings.lowBalanceThreshold.hint': '余额低于或等于该值时高亮提示。留空则不提示。',
   'settings.lowBalanceThreshold.invalid': '请输入精确的十进制数字，例如 10.00。',
+  'settings.saveFailed': '未保存：服务端拒绝了此更改。',
 } satisfies Record<string, string>
 
 /** The usageInfo namespace key union. */
@@ -84,7 +88,7 @@ export const en = {
 
   'cost.title': 'Session cost',
   'cost.pending': 'Shown once a request has been billed',
-  'cost.estimate': 'Estimated at the rates set below; your bill is the authority.',
+  'cost.estimate': 'Estimated at the rates configured in settings; your bill is the authority.',
   'cost.input': 'Uncached input',
   'cost.cacheWrite': 'Cache write',
   'cost.cacheRead': 'Cache read',
@@ -126,7 +130,11 @@ export const en = {
   'settings.showBalance.hint': 'Show the account balance in the session header. Off stops asking the provider entirely.',
   'settings.refreshInterval': 'Refresh interval (seconds)',
   'settings.refreshInterval.hint': 'How often the browser re-reads the balance. Tabs share one host-side reading, so open windows do not multiply requests.',
+  'settings.refreshInterval.minimum': 'The minimum is {seconds} s, the host’s cache window: a faster poll would only be answered from the cache.',
+  'settings.refreshInterval.invalid': 'Enter a whole number of seconds.',
+  'settings.refreshInterval.belowCache': 'Must be at least {seconds} s, the host’s cache window.',
   'settings.lowBalanceThreshold': 'Low-balance warning',
   'settings.lowBalanceThreshold.hint': 'Warn once the balance reaches this figure. Blank disables the warning.',
   'settings.lowBalanceThreshold.invalid': 'Enter an exact decimal, such as 10.00.',
+  'settings.saveFailed': 'Not saved: the host refused this change.',
 } satisfies Record<UsageInfoKey, string>

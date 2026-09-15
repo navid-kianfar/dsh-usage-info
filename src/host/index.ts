@@ -49,6 +49,18 @@ const RATE = /^\d+(?:\.\d+)?$/u
 /** An ISO 4217 code, as the readout labels the estimate it computes from those rates. */
 const CURRENCY = /^[A-Z]{3}$/u
 
+/**
+ * The cost estimate's composition defaults, restated from cordis.patch.yml (DeepSeek's published
+ * deepseek-chat rates per one million tokens). They exist in code only for a row that predates the
+ * estimate; a row that names the keys is what a deployment actually runs, so the patch stays the
+ * place these are documented and changed — keep the two equal.
+ */
+const COST_DEFAULTS = {
+  showCost: true,
+  currency: 'USD',
+  rates: { input: '0.28', cacheRead: '0.028', output: '0.42' },
+} as const
+
 /** Deployment configuration for the usage readout; the `usage-info` settings section's own shape. */
 export type Config = UsageInfoSettings
 
@@ -106,14 +118,18 @@ export class UsageInfoService extends TypertRemoteService {
   /** Loader validation for the three visibility flags, the two cadences, the warning threshold, and the cost rates. */
   static Config: z<Config> = z.object({
     showContext: z.boolean().required(),
-    showCost: z.boolean().required(),
+    // The cost keys default where every older key is required, and that asymmetry is deliberate: they
+    // were added after the row shipped, and the patch header tells a profile to restate the whole row.
+    // A row restated before they existed must keep loading, so these take cordis.patch.yml's own
+    // values rather than failing that profile with a missing required value.
+    showCost: z.boolean().default(COST_DEFAULTS.showCost),
     showBalance: z.boolean().required(),
     costRates: z.object({
-      input: z.string().required(),
-      cacheRead: z.string().required(),
-      output: z.string().required(),
-    }).required(),
-    costCurrency: z.string().required(),
+      input: z.string().default(COST_DEFAULTS.rates.input),
+      cacheRead: z.string().default(COST_DEFAULTS.rates.cacheRead),
+      output: z.string().default(COST_DEFAULTS.rates.output),
+    }),
+    costCurrency: z.string().default(COST_DEFAULTS.currency),
     refreshIntervalMs: z.number().step(1).min(1_000).required(),
     cacheTtlMs: z.number().step(1).min(0).required(),
     lowBalanceThreshold: z.string(),

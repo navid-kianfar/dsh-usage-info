@@ -18,7 +18,9 @@
         # so these rates are the deployment's own: exact decimals per ONE MILLION tokens, in
         # `costCurrency`. The defaults are DeepSeek's published deepseek-chat rates (cache miss, cache
         # hit, output); set them to the model you actually run. Cache writes have no rate of their own —
-        # they are billed at the input rate, which is why three rates cover four buckets.
+        # they are billed at the input rate, which is why three rates cover four buckets. These three
+        # keys are the only optional ones in this row: a profile override restated before they existed
+        # still loads, at exactly these values.
         showCost: true
         costCurrency: USD
         costRates:

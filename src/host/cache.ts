@@ -24,6 +24,16 @@ export class BalanceCache {
   private inFlight: Promise<AccountBalance> | undefined
 
   /**
+   * Which account the cache is currently answering for, advanced by every {@link invalidate}.
+   *
+   * Clearing `stored` alone is not enough, because a reading already in flight was started with the
+   * previous key and lands afterwards. Every reading is tagged with the generation it started under,
+   * and one that lands under a later generation is neither stored nor handed to a waiter: the cache
+   * cannot tell which key a reading used, but it can tell the reading began before the key changed.
+   */
+  private generation = 0
+
+  /**
    * @param load - the provider call this cache fronts.
    * @param now - clock, injected so freshness is testable without waiting.
    */
@@ -48,8 +58,20 @@ export class BalanceCache {
     }
     // A forced refresh joins a reading already in flight rather than starting a second one. The
     // in-flight reading is by definition newer than anything stored, which is all `force` asks for.
+    const generation = this.generation
     this.inFlight ??= this.start()
-    return await this.race(this.inFlight, signal)
+    try {
+      const reading = await this.race(this.inFlight, signal)
+      if (generation === this.generation) return reading
+    } catch (error) {
+      // An abort is this caller's own and ends its wait whatever happened to the key meanwhile; any
+      // other failure belongs to the reading, and is only this caller's answer if the key held.
+      if (signal.aborted || generation === this.generation) throw error
+    }
+    // The key changed while this caller waited, so what landed answers for the previous account.
+    // Asking again joins the new generation's reading instead of starting a third one, and a caller
+    // that keeps losing that race is still bounded by its own signal.
+    return await this.get(ttlMs, force, signal)
   }
 
   /**
@@ -59,15 +81,26 @@ export class BalanceCache {
    * where continuing to serve the old account's figures would be wrong rather than merely stale.
    */
   invalidate(): void {
+    this.generation += 1
     this.stored = undefined
+    // Released rather than cancelled: the old reading may still be shared by callers mid-race, and
+    // each of them notices the generation moved and re-asks. What must not happen is a NEW caller
+    // joining it, which is what leaving the slot filled would do.
+    this.inFlight = undefined
   }
 
-  /** Run one shared reading, storing it and clearing the in-flight slot either way. */
+  /**
+   * Run one shared reading, storing it and clearing the in-flight slot either way — but only while
+   * the generation it started under is still current. A superseded reading touches neither: its
+   * value is the previous account's, and the slot by then holds the reading that replaced it.
+   */
   private start(): Promise<AccountBalance> {
+    const generation = this.generation
     // Never aborted: this promise belongs to every waiter, so no single caller's signal may end it.
     const shared = this.load(new AbortController().signal)
     const settle = shared.then(
       (reading) => {
+        if (generation !== this.generation) return reading
         this.stored = reading
         this.inFlight = undefined
         return reading
@@ -75,7 +108,7 @@ export class BalanceCache {
       (error: unknown) => {
         // A failed reading is not cached: the next caller must be free to try again immediately,
         // and a stored reading from before the failure stays valid until its own TTL expires.
-        this.inFlight = undefined
+        if (generation === this.generation) this.inFlight = undefined
         throw error
       },
     )

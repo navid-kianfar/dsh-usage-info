@@ -71,10 +71,15 @@ The **Usage information** card on the plugin settings tab edits these live; the 
 | Field | Default | Meaning |
 |---|---|---|
 | `showContext` | `true` | Show context occupancy for the current session. |
+| `showCost` | `true` | Show the session-cost estimate. |
+| `costCurrency` | `USD` | ISO 4217 code the rates are quoted in. |
+| `costRates` | `input: '0.28'`, `cacheRead: '0.028'`, `output: '0.42'` | Exact decimal rates per one million tokens. Cache writes are billed at `input`. |
 | `showBalance` | `true` | Show the account balance. |
-| `refreshIntervalMs` | `300000` | How often each browser re-asks for a balance. |
+| `refreshIntervalMs` | `300000` | How often each browser re-asks for a balance. The settings card refuses a value below `cacheTtlMs`. |
 | `cacheTtlMs` | `240000` | How long one reading stays servable from the host's shared cache. |
 | `lowBalanceThreshold` | *(unset)* | Exact decimal string at or below which the readout warns. Blank disables the warning. |
+
+`showCost`, `costCurrency` and `costRates` fall back to the defaults above when a profile's `usage-info` row omits them, so an override restated before the cost estimate existed keeps loading. Every other key is required.
 
 `refreshIntervalMs` is the poll cadence and `cacheTtlMs` is the request rate. Every open tab polls on its own timer, but a poll landing inside the cache window is answered from the host's stored reading, so the provider is asked at most once per `cacheTtlMs` no matter how many windows are open. Setting `cacheTtlMs` above `refreshIntervalMs` is refused at load: every poll would be served a reading already older than the cadence it was scheduled at.
 

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -188,6 +189,44 @@ describe('balance()', () => {
 })
 
 describe('configuration', () => {
+  it('loads a usage-info row restated before the cost estimate existed, at the patch defaults', async () => {
+    // The shape a profile override carried before `showCost`, `costRates` and `costCurrency` were
+    // added. The patch header tells operators to restate every key of the row, so this exact row is
+    // sitting in real profiles; it must keep loading and pick the estimate up at cordis.patch.yml's
+    // own defaults rather than fail with a missing required value.
+    const preCost = { showContext: true, showBalance: false, refreshIntervalMs: 600_000, cacheTtlMs: 240_000 }
+    const ctx = new Context()
+    await ctx.plugin(UsageInfoService, preCost as UsageConfig)
+
+    const view = await ctx.usageInfo.describe()
+    expect(view).toMatchObject({
+      showContext: true,
+      showBalance: false,
+      refreshIntervalMs: 600_000,
+      showCost: true,
+      costRates: { input: '0.28', cacheRead: '0.028', output: '0.42' },
+      costCurrency: 'USD',
+    })
+  })
+
+  it('defaults the cost keys to exactly what cordis.patch.yml ships', async () => {
+    // The schema restates the patch's values for rows that predate them; this is what keeps the two
+    // copies from drifting. Read as text because the patch is the one file a person edits by hand.
+    const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+    const resolved = UsageInfoService.Config({
+      showContext: true, showBalance: true, refreshIntervalMs: 300_000, cacheTtlMs: 240_000,
+    } as UsageConfig)
+    const { input, cacheRead, output } = resolved.costRates
+    expect(patch).toContain(`showCost: ${String(resolved.showCost)}`)
+    expect(patch).toContain(`costCurrency: ${resolved.costCurrency}`)
+    expect(patch).toMatch(new RegExp(`input: '${input}'\\s+cacheRead: '${cacheRead}'\\s+output: '${output}'`, 'u'))
+  })
+
+  it('fills a partially restated rate table from the defaults rather than refusing it', () => {
+    const resolved = UsageInfoService.Config({ ...USAGE, costRates: { output: '1.10' } } as unknown as UsageConfig)
+    expect(resolved.costRates).toEqual({ input: '0.28', cacheRead: '0.028', output: '1.10' })
+  })
+
   it('refuses a cache window wider than the poll cadence', async () => {
     await expect(boot({ usage: { cacheTtlMs: 400_000, refreshIntervalMs: 300_000 } }))
       .rejects.toThrowError(/cacheTtlMs/u)

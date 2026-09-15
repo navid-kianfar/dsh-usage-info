@@ -103,7 +103,7 @@ describe('BalanceCache', () => {
     expect(load).toHaveBeenCalledTimes(2)
   })
 
-  it('drops the stored reading when invalidated, so a key change cannot serve the old account', async () => {
+  it('drops the stored reading when invalidated, so the next caller asks the provider again', async () => {
     const load = vi.fn()
       .mockResolvedValueOnce(reading(0, '100.00'))
       .mockResolvedValueOnce(reading(0, '5.00'))
@@ -114,6 +114,49 @@ describe('BalanceCache', () => {
     const second = await cache.get(60_000, false, new AbortController().signal)
 
     expect(second.amounts[0]?.total).toBe('5.00')
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('discards a reading that was in flight when the key changed, however late it lands', async () => {
+    // The old key's reading is started first and settles LAST: the order a slow provider produces
+    // when someone swaps accounts while a poll is still waiting on the previous one.
+    const releases: ((value: AccountBalance) => void)[] = []
+    const load = vi.fn(() => new Promise<AccountBalance>((resolve) => { releases.push(resolve) }))
+    const cache = new BalanceCache(load, () => 0)
+
+    const beforeChange = cache.get(60_000, false, new AbortController().signal)
+    cache.invalidate()
+    const afterChange = cache.get(60_000, false, new AbortController().signal)
+    expect(load).toHaveBeenCalledTimes(2)
+
+    releases[1]?.(reading(0, '5.00'))
+    releases[0]?.(reading(0, '100.00'))
+
+    // The caller who asked before the change waited on the old key, and is re-served the new one
+    // rather than handed the previous account's money.
+    await expect(afterChange).resolves.toEqual(reading(0, '5.00'))
+    await expect(beforeChange).resolves.toEqual(reading(0, '5.00'))
+    // And the late reading was not stored: a caller inside the window still sees the new account.
+    await expect(cache.get(60_000, false, new AbortController().signal)).resolves.toEqual(reading(0, '5.00'))
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not let a stale in-flight failure clear the slot of the reading that replaced it', async () => {
+    const settlers: { resolve: (value: AccountBalance) => void, reject: (error: Error) => void }[] = []
+    const load = vi.fn(() => new Promise<AccountBalance>((resolve, reject) => { settlers.push({ resolve, reject }) }))
+    const cache = new BalanceCache(load, () => 0)
+
+    const stale = cache.get(60_000, false, new AbortController().signal)
+    cache.invalidate()
+    const fresh = cache.get(60_000, false, new AbortController().signal)
+    settlers[0]?.reject(new Error('old key refused'))
+    // A third caller arriving now must join the new key's reading, not start another one.
+    const joining = cache.get(60_000, false, new AbortController().signal)
+    settlers[1]?.resolve(reading(0, '5.00'))
+
+    await expect(fresh).resolves.toEqual(reading(0, '5.00'))
+    await expect(joining).resolves.toEqual(reading(0, '5.00'))
+    await expect(stale).resolves.toEqual(reading(0, '5.00'))
     expect(load).toHaveBeenCalledTimes(2)
   })
 })

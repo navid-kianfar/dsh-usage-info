@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: the `contextPressure` / `contextBreakdown` projection key merges.
 import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type { UsageBalanceResult, UsageBalanceSuccess, UsageInfoView } from '../host/types.ts'
+import { balanceFailure, balanceTick, describeFailure } from './balance-state.ts'
 import { contextOccupancy, contextParts, formatTokens } from './context.ts'
 import { sessionCost, type UsageTokens } from './cost.ts'
 import { formatAmount, formatDecimal, isLowBalance, readingAge } from './money.ts'
@@ -55,33 +56,6 @@ const COST_ROWS = [
 ] as const satisfies readonly { key: keyof UsageTokens; label: UsageInfoKey }[]
 
 /**
- * Failure classes that will not change without a configuration edit, so polling stops on them.
- *
- * `unsupported` means this base URL publishes no balance endpoint at all and `not-configured` means
- * there is no key to send. Both are permanent from the browser's side: a poll that kept retrying
- * would spend a request every interval, forever, to be told the same thing.
- */
-const TERMINAL_CODES: ReadonlySet<string> = new Set(['unsupported', 'not-configured', 'no-provider'])
-
-/**
- * Operator-facing copy for one balance failure. Error surfaces stay English by repository policy, so
- * these are literals rather than dictionary keys.
- * @param code - the classified failure from the Host.
- * @returns a short operator-facing line.
- */
-function describeFailure(code: string): string {
-  switch (code) {
-    case 'no-provider': return 'no balance provider'
-    case 'not-configured': return 'no API key for the balance provider'
-    case 'unauthorized': return 'the balance endpoint rejected the API key'
-    case 'unsupported': return 'this endpoint publishes no balance'
-    case 'provider-timeout': return 'the balance endpoint timed out'
-    case 'provider-unavailable': return 'the balance endpoint is unreachable'
-    default: return 'could not read the balance'
-  }
-}
-
-/**
  * The session header's usage readout: how full the model's context window is, what this session has
  * cost so far, and what the account paying for it currently holds.
  *
@@ -92,11 +66,20 @@ function describeFailure(code: string): string {
  * tokens already are. The balance cannot work that way: it needs an API key, so it crosses one Remote
  * call and the browser never sees the credential.
  *
- * The whole readout renders nothing when it has nothing to say — no provider, no capacity reported
- * yet, all halves switched off — rather than showing a control that does not work.
+ * The whole readout renders nothing when it has nothing to say — every half switched off — rather
+ * than showing a control that does not work. A balance that cannot be read is NOT nothing to say: a
+ * missing provider or key is shown in the balance section with what to do about it, and re-asked on
+ * the balance cadence, because a hidden section cannot tell a person that anything is wrong.
+ *
+ * What the readout may show comes from the Host's `describe`, which it asks again whenever the bound
+ * settings section changes. Asking once on mount would leave an open session on the rates, flags and
+ * cadence it was opened with until a reload.
  */
-export function UsageReadout({ useProjection, describeUsage, readBalance, t }: UsageReadoutProps) {
+export function UsageReadout({ useProjection, useUsageSettings, describeUsage, readBalance, t }: UsageReadoutProps) {
   const pressure = useProjection('contextPressure')
+  // Only the resolved value's identity is read: the scope hands out a new value exactly when the
+  // section changed, and that is the moment the Host's view may have changed with it.
+  const settings = useUsageSettings(snapshot => snapshot.value)
   const breakdown = useProjection('contextBreakdown')
   const usage = useProjection('tokenUsage')
   const [view, setView] = useState<UsageInfoView | null>(null)
@@ -106,6 +89,10 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
   const [ageNow, setAgeNow] = useState(() => Date.now())
   const rootRef = useRef<HTMLSpanElement | null>(null)
   const aliveRef = useRef(true)
+  /** Sequence of `describe` calls, so an answer overtaken by a later one is dropped rather than applied. */
+  const describedRef = useRef(0)
+  /** The settings value the last settings-driven re-read answered for; skips the mount's own read. */
+  const settingsSeenRef = useRef(settings)
   // Read through a call rather than the property: an `await` can unmount this component, but the
   // compiler narrows `aliveRef.current` after the first check and would treat every later one as
   // dead code.
@@ -116,15 +103,29 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
     return () => { aliveRef.current = false }
   }, [])
 
-  useEffect(() => {
-    void describeUsage().then((next) => {
-      if (alive()) setView(next)
-    }, () => {
-      // A failed probe leaves `view` null, which renders the same as a deployment that switched both
-      // halves off: nothing at all. There is no partial state worth showing from a Host that did not
-      // answer the question of what this readout is allowed to display.
-    })
+  /**
+   * Ask the Host what this readout may show, applying the answer only if no later ask overtook it.
+   * @returns the view that was applied, or undefined when it was overtaken, failed, or landed after
+   * unmount — so a caller acting on the answer acts only on the one now on screen.
+   */
+  const describe = useCallback(async (): Promise<UsageInfoView | undefined> => {
+    describedRef.current += 1
+    const sequence = describedRef.current
+    try {
+      const next = await describeUsage()
+      if (!alive() || sequence !== describedRef.current) return undefined
+      setView(next)
+      return next
+    } catch {
+      // A failed probe leaves the previous view standing, or `view` null before the first one, which
+      // renders the same as a deployment that switched every half off: nothing at all. There is no
+      // partial state worth showing from a Host that did not answer what this readout may display,
+      // and the next settings change or cadence tick asks again.
+      return undefined
+    }
   }, [describeUsage])
+
+  useEffect(() => { void describe() }, [describe])
 
   const refresh = useCallback((force: boolean): void => {
     setLoading(true)
@@ -133,22 +134,42 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
       setBalance(next)
       setAgeNow(Date.now())
       setLoading(false)
+      // The provider went away since the view was read: the view is what says whether one is mounted,
+      // so it is re-read rather than trusting a view that still claims one.
+      if (!next.ok && next.code === 'no-provider') void describe()
     }, () => {
       // A transport failure is not a balance failure: the previous reading (if any) stays on screen
       // rather than being replaced by an error the next poll will probably clear on its own.
       if (alive()) setLoading(false)
     })
-  }, [readBalance])
+  }, [readBalance, describe])
 
-  const wantsBalance = view !== null && view.showBalance && view.balanceAvailable
-  const halted = balance !== null && !balance.ok && TERMINAL_CODES.has(balance.code)
+  const tick = balanceTick(view, balance)
+  const refreshIntervalMs = view?.refreshIntervalMs
 
+  // The one balance cadence. A reading tick reads at once and then on the interval; a describe tick
+  // only on the interval, since the view it would ask for was just read. Neither answer changes the
+  // tick's kind unless something actually changed, so a settled state keeps one timer running.
   useEffect(() => {
-    if (!wantsBalance || halted) return undefined
-    refresh(false)
-    const timer = setInterval(() => { refresh(false) }, view.refreshIntervalMs)
+    if (tick === 'none' || refreshIntervalMs === undefined) return undefined
+    if (tick === 'read') refresh(false)
+    const onTick = tick === 'read' ? () => { refresh(false) } : () => { void describe() }
+    const timer = setInterval(onTick, refreshIntervalMs)
     return () => { clearInterval(timer) }
-  }, [wantsBalance, halted, view?.refreshIntervalMs, refresh])
+  }, [tick, refreshIntervalMs, refresh, describe])
+
+  // A settings change re-reads the view, then asks for the balance once under it — judged against the
+  // NEW view with no previous answer, because the change may be the fix: the balance switched back on,
+  // or an edit made after an `unsupported` stop. The previous answer stays on screen until this one
+  // replaces it, so a retry that fails the same way does not flash through a loading state.
+  useEffect(() => {
+    if (settingsSeenRef.current === settings) return
+    settingsSeenRef.current = settings
+    void describe().then((next) => {
+      if (next === undefined) return
+      if (balanceTick(next, null) === 'read') refresh(false)
+    })
+  }, [settings, describe, refresh])
 
   // Outside click and Escape close, one document listener while open.
   useEffect(() => {
@@ -184,8 +205,11 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
     ? null
     : sessionCost(billed, view.costRates)
   const showCostSection = view?.showCost === true
-  const reading: UsageBalanceSuccess | null = balance?.ok === true ? balance : null
-  const showBalanceSection = wantsBalance && !halted
+  // A reading from a provider the view no longer reports is the previous provider's money, not a
+  // stale figure for this one, so it leaves the screen with the provider.
+  const reading: UsageBalanceSuccess | null = view?.balanceAvailable === true && balance?.ok === true ? balance : null
+  const failure = balanceFailure(view, balance)
+  const showBalanceSection = view?.showBalance === true
   // A seat with no half to show is not a disabled control — it is no control. The header keeps its own
   // spacing, so an empty utility renders as nothing rather than as a gap.
   if (occupancy === null && !showCostSection && !showBalanceSection) return null
@@ -338,7 +362,9 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
                   {loading ? t('balance.loading') : '↻'}
                 </button>
               </div>
-              {reading === null && <span className={css.muted}>{t('balance.loading')}</span>}
+              {/* "Reading…" only while nothing has answered: beside a failure it would be a spinner that
+                  never resolves. */}
+              {reading === null && failure === undefined && <span className={css.muted}>{t('balance.loading')}</span>}
               {reading !== null && reading.amounts.length === 0 && (
                 <span className={css.muted}>{t('balance.empty')}</span>
               )}
@@ -372,7 +398,7 @@ export function UsageReadout({ useProjection, describeUsage, readBalance, t }: U
                   {age.unit === 'now' ? t('balance.age.now') : t(`balance.age.${age.unit}`, { value: String(age.value) })}
                 </span>
               )}
-              {balance?.ok === false && <span className={css.warn}>{describeFailure(balance.code)}</span>}
+              {failure !== undefined && <span className={css.warn}>{describeFailure(failure)}</span>}
             </section>
           )}
         </div>

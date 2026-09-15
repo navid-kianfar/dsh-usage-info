@@ -30,6 +30,7 @@ import usageRemote from '../../generated/typert.remote-client.js'
 import type { UsageBalanceResult, UsageInfoSettings, UsageInfoView } from '../host/types.ts'
 import { UsageReadout } from './UsageReadout.tsx'
 import { UsageSettingsCard } from './UsageSettingsCard.tsx'
+import { settingsWriter, type SettingsWriter } from './settings-writes.ts'
 import { en, zh, type UsageInfoKey } from './locales.ts'
 
 export type { UsageInfoKey } from './locales.ts'
@@ -37,6 +38,7 @@ export type { UsageReadoutProps } from './UsageReadout.tsx'
 export type { UsageSettingsCardProps } from './UsageSettingsCard.tsx'
 export type { ContextOccupancy, ContextPart } from './context.ts'
 export type { ReadingAge } from './money.ts'
+export type { SettingsWriter, WriteOutcome } from './settings-writes.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -60,6 +62,15 @@ const SETTINGS_NS = 'usage-info'
 
 /** Injected business face of the session-header readout. */
 export interface UsageReadoutInjected {
+  /** Registrant-private reactive sources the renderer binds to `use<Name>` hooks. */
+  hooks: {
+    /**
+     * The bound `usage-info` settings scope. The readout does not render from it — the Host's view
+     * stays the one source of what it may show — but a change to it is the signal to ask for that view
+     * again, so an edited rate or flag reaches an open session without a reload.
+     */
+    usageSettings: SettingsScope<UsageInfoSettings>
+  }
   /**
    * Read what this readout is allowed to show and how often to poll: the balance provider's
    * readiness, the deployment's visibility flags, the refresh cadence, and the warning threshold.
@@ -87,12 +98,11 @@ export interface UsageSettingsInjected {
    */
   describeUsage: () => Promise<UsageInfoView>
   /**
-   * Store one field of the `usage-info` section; the bound scope owns revision fencing.
-   * @param field - the field name inside the namespace.
-   * @param value - the JSON-shaped value the control produced.
-   * @returns settlement after the write.
+   * Field writes to the `usage-info` section that report whether the Host kept each one. The bound
+   * scope still owns revision fencing; the writer adds the outcome the scope's own promise does not
+   * carry, and builds composite fields from the latest value rather than the rendered one.
    */
-  setField: (field: string, value: unknown) => Promise<void>
+  writeSettings: SettingsWriter<UsageInfoSettings>
 }
 
 /**
@@ -142,15 +152,19 @@ function surface(ctx: ClientContext): void {
   const readBalance = (refresh: boolean): Promise<UsageBalanceResult> =>
     ctx.remote.usageInfo.balance({ refresh }).then(unwrap)
 
+  // One scope and one writer for both seats, bound before either registers. The writer's burst
+  // bookkeeping only works if every write to the section from this browser goes through the same one.
+  const scope = ctx.settingsScope.bind<UsageInfoSettings>({ namespace: SETTINGS_NS })
+  const writeSettings = settingsWriter(scope)
+
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
     name: 'conversation.session.header.utilities',
     // List seats are addressed by id; the seat orders itself after the resident chrome.
     id: 'usage-info',
     locale: LOCALE_NS,
-    inject: (): UsageReadoutInjected => ({ describeUsage, readBalance }),
+    inject: (): UsageReadoutInjected => ({ hooks: { usageSettings: scope }, describeUsage, readBalance }),
   }, UsageReadout))
 
-  const scope = ctx.settingsScope.bind<UsageInfoSettings>({ namespace: SETTINGS_NS })
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
     key: SETTINGS_NS,
@@ -158,7 +172,7 @@ function surface(ctx: ClientContext): void {
     inject: (): UsageSettingsInjected => ({
       hooks: { usageSettings: scope },
       describeUsage,
-      setField: (field, value) => scope.set(field, value),
+      writeSettings,
     }),
   }, UsageSettingsCard))
 }

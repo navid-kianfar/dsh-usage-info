@@ -19,6 +19,14 @@ describe('contextOccupancy', () => {
     expect(contextOccupancy({ pressureTokens: 10 })).toBeNull()
   })
 
+  it('reads a zero or unusable capacity as unknown rather than dividing by it', () => {
+    // 0 / 0 is NaN and n / 0 is Infinity; either would reach the header as "NaN%" or a full ring.
+    expect(contextOccupancy({ pressureTokens: 0, contextWindow: 0 })).toBeNull()
+    expect(contextOccupancy({ pressureTokens: 1_000, contextWindow: 0 })).toBeNull()
+    expect(contextOccupancy({ pressureTokens: 1_000, contextWindow: -1 })).toBeNull()
+    expect(contextOccupancy({ pressureTokens: 1_000, contextWindow: Number.NaN })).toBeNull()
+  })
+
   it('clamps a prompt priced above the advertised capacity', () => {
     expect(contextOccupancy({ pressureTokens: 150_000, contextWindow: 100_000 })?.percent).toBe(100)
   })

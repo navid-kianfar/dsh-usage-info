@@ -37,11 +37,15 @@ export interface ContextPart {
  * against, and it is the only one of the two that reacts to a compaction — compaction reports no
  * usage of its own, so `pressureTokens` alone would keep showing a full context after one.
  * @param pressure - the `contextPressure` projection value, absent before any provider usage.
- * @returns the occupancy, or null while either half of the fraction is unknown.
+ * @returns the occupancy, or null while either half of the fraction is unknown or the capacity is
+ * not a positive number.
  */
 export function contextOccupancy(pressure: ContextPressureProjection | undefined): ContextOccupancy | null {
   const usedTokens = pressure?.projectedTokens ?? pressure?.pressureTokens
   if (usedTokens === undefined || pressure?.contextWindow === undefined) return null
+  // A route that reports no usable capacity has not told us the denominator any more than one that
+  // reports none: 0 / 0 renders as "NaN%" and n / 0 as a full ring, both of which read as a fact.
+  if (!Number.isFinite(pressure.contextWindow) || pressure.contextWindow <= 0) return null
   return {
     percent: Math.min(100, Math.round(usedTokens / pressure.contextWindow * 100)),
     usedTokens,
