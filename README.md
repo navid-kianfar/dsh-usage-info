@@ -2,15 +2,13 @@
 
 A session-header readout for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) Web Client. It shows how full the model's context window is, what the current session has cost at the rates you configure, and what your provider account currently holds. Context and cost are computed in the browser from token figures the harness already publishes. The balance is read on the host, so the API key never reaches the browser.
 
-![Usage panel open below the session header, showing the Context, Session cost and Balance sections](https://raw.githubusercontent.com/navid-kianfar/dsh-usage-info/main/docs/screenshots/usage-panel.png)
+![Usage panel open below the gauge button in the session header, before the first billed request: context and cost pending, and the balance section showing a rejected-key error with a retry button](https://raw.githubusercontent.com/navid-kianfar/dsh-usage-info/main/docs/screenshots/usage-panel.png)
 
 ## Features
 
 ### Header readout
 
 A button in the session header's utilities area. It shows a ring with the context percentage once the session has made a request, and the first currency of the account balance once a reading has landed. Until either exists it shows a gauge icon, with an amber dot when the balance cannot be read (for example on a default install with the provider disabled). The button turns to a warning colour when that balance is at or below `lowBalanceThreshold`. Click it to open the usage panel; click outside or press Escape to close it.
-
-![Session header with the usage readout: context ring at a percentage and a CNY balance](https://raw.githubusercontent.com/navid-kianfar/dsh-usage-info/main/docs/screenshots/header-readout.png)
 
 ### Usage panel
 
@@ -39,8 +37,6 @@ When the balance cannot be shown, the Balance section says why, and the poll eit
 | 408 or 504, or the provider's own timeout | the balance endpoint timed out | Keeps polling |
 | 429, 5xx, or unreachable | the balance endpoint is unreachable | Keeps polling |
 | Any other status, or a malformed body | could not read the balance | Keeps polling |
-
-![Usage panel on a default install: context and cost pending, balance section showing the no-provider line](https://raw.githubusercontent.com/navid-kianfar/dsh-usage-info/main/docs/screenshots/usage-panel-no-provider.png)
 
 ### Settings card
 
