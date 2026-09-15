@@ -96,7 +96,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/achasoft/dsh-usage-info.git"
+    "url": "git+https://github.com/navid-kianfar/dsh-usage-info.git"
   },
   "keywords": [
     "deepseek-harness",
