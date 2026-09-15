@@ -15,7 +15,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { installSettingsSection, settingsNamespace } from './settings-section.ts'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 // Type-only: the credential seam's `credentials/reference-updated` Events merge, listened to below.
 // Named here rather than inherited from a sibling module's import, because the listener's key only
