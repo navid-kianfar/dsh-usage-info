@@ -3,6 +3,7 @@
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'readout.aria': '用量信息',
+  'readout.ariaAttention': '用量信息，余额需要处理',
   'readout.title': '上下文占用与账户余额',
   'panel.title': '用量',
 
@@ -74,6 +75,7 @@ export type UsageInfoKey = keyof typeof zh
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
   'readout.aria': 'Usage information',
+  'readout.ariaAttention': 'Usage information, balance needs attention',
   'readout.title': 'Context usage and account balance',
   'panel.title': 'Usage',
 

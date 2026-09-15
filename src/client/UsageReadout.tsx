@@ -8,8 +8,9 @@ import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type { UsageBalanceResult, UsageBalanceSuccess, UsageInfoView } from '../host/types.ts'
 import { balanceFailure, balanceTick, describeFailure } from './balance-state.ts'
 import { contextOccupancy, contextParts, formatTokens } from './context.ts'
-import { sessionCost, type UsageTokens } from './cost.ts'
+import type { UsageTokens } from './cost.ts'
 import { formatAmount, formatDecimal, isLowBalance, readingAge } from './money.ts'
+import { costSummary, triggerFace } from './readout-state.ts'
 import type { UsageInfoKey } from './locales.ts'
 import type { UsageReadoutInjected } from './index.ts'
 import css from './UsageReadout.module.css'
@@ -54,6 +55,26 @@ const COST_ROWS = [
   { key: 'cacheReadTokens', label: 'cost.cacheRead' },
   { key: 'outputTokens', label: 'cost.output' },
 ] as const satisfies readonly { key: keyof UsageTokens; label: UsageInfoKey }[]
+
+/** What the cost section's head figure reads before anything is priced: a placeholder, never `0`. */
+const PENDING_FIGURE = '—'
+
+/**
+ * The harness's `ic_gauge_outline_16` glyph (ui-primitives `IconGaugeOutline16` in dsh 0.1.5-rc.2),
+ * drawn here rather than imported: the harness checkout this package typechecks against predates that
+ * export, and a browser module table without it would hand this component `undefined` at render and
+ * take the session header down with it. Same geometry and stroke, so it reads as one icon set.
+ * @returns the 16px glyph, colored by `currentColor`.
+ */
+function GaugeGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M3.49 13.26A6.375 6.375 0 1 1 12.51 13.26" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M8 8.75L11.4 5.35" stroke="currentColor" strokeWidth="1.25" />
+      <circle cx="8" cy="8.75" r="1.55" fill="currentColor" />
+    </svg>
+  )
+}
 
 /**
  * The session header's usage readout: how full the model's context window is, what this session has
@@ -198,12 +219,9 @@ export function UsageReadout({ useProjection, useUsageSettings, describeUsage, r
   }, [open])
 
   const occupancy = view?.showContext === true ? contextOccupancy(pressure) : null
-  // Reading the totals and paying for them are different facts: `sessionCost` answers null until a
+  // Reading the totals and paying for them are different facts: the summary stays pending until a
   // request has been billed, which is what keeps a brand-new session from reading as costing 0.00.
-  const billed = usage ?? null
-  const cost = billed === null || view?.costRates === undefined
-    ? null
-    : sessionCost(billed, view.costRates)
+  const cost = costSummary(usage ?? null, view?.costRates)
   const showCostSection = view?.showCost === true
   // A reading from a provider the view no longer reports is the previous provider's money, not a
   // stale figure for this one, so it leaves the screen with the provider.
@@ -219,21 +237,28 @@ export function UsageReadout({ useProjection, useUsageSettings, describeUsage, r
   const percentText = occupancy === null ? '' : `${occupancy.percent}%`
   const parts = contextParts(breakdown)
   const age = reading === null ? null : readingAge(reading.fetchedAt, ageNow)
-  const totalTokens = billed === null
-    ? 0
-    : billed.uncachedInputTokens + billed.cacheWriteTokens + billed.cacheReadTokens + billed.outputTokens
+  const face = triggerFace(occupancy, primary, failure)
+  const triggerClass = face === 'readings'
+    ? `${css.trigger} ${low ? css.low : ''}`
+    : `${css.trigger} ${css.glyphOnly}`
 
   return (
     <span ref={rootRef} className={css.root}>
       <Tooltip label={t('readout.title')} side="bottom" delayMs={200} disabled={open}>
         <button
           type="button"
-          className={`${css.trigger} ${low ? css.low : ''}`}
-          aria-label={t('readout.aria')}
+          className={triggerClass}
+          aria-label={face === 'attention' ? t('readout.ariaAttention') : t('readout.aria')}
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => { setOpen(!open) }}
         >
+          {face !== 'readings' && (
+            <span className={css.glyph}>
+              <GaugeGlyph />
+              {face === 'attention' && <span className={css.attentionDot} aria-hidden />}
+            </span>
+          )}
           {occupancy !== null && (
             <>
               <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden>
@@ -320,16 +345,18 @@ export function UsageReadout({ useProjection, useUsageSettings, describeUsage, r
             <section className={css.section}>
               <div className={css.sectionHead}>
                 <span className={css.sectionTitle}>{t('cost.title')}</span>
-                {billed !== null && (
-                  <span className={css.figures}>{formatTokens(totalTokens)}</span>
-                )}
+                {/* The placeholder is hidden from assistive tech: "em dash" read aloud says nothing the
+                    pending line below does not already say. */}
+                {cost.state === 'priced'
+                  ? <span className={css.figures}>{formatTokens(cost.totalTokens)}</span>
+                  : <span className={css.figures} aria-hidden>{PENDING_FIGURE}</span>}
               </div>
-              {cost === null || billed === null
+              {cost.state === 'pending'
                 ? <span className={css.muted}>{t('cost.pending')}</span>
                 : (
                   <>
                     <span className={css.headline}>
-                      {formatAmount(view?.costCurrency ?? 'USD', cost)}
+                      {formatAmount(view?.costCurrency ?? 'USD', cost.amount)}
                     </span>
                     {/* Token counts, not money, per row: one figure is what a person is deciding
                         against, while the rows behind it are what a provider reported. */}
@@ -337,7 +364,7 @@ export function UsageReadout({ useProjection, useUsageSettings, describeUsage, r
                       {COST_ROWS.map(row => (
                         <div key={row.key} className={css.row}>
                           <dt>{t(row.label)}</dt>
-                          <dd>{formatTokens(billed[row.key])}</dd>
+                          <dd>{formatTokens(cost.tokens[row.key])}</dd>
                         </div>
                       ))}
                     </dl>

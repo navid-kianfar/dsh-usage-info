@@ -28,6 +28,31 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* Nothing to read yet: a square 28px icon button, the size of the harness's other header controls,
+   so the seat reads as a control rather than as an empty pill. */
+.glyphOnly {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+}
+
+.glyph {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The balance cannot be read and nothing else is known. Warn, not error: the panel says what to do,
+   and the low-balance red stays reserved for money running out. */
+.attentionDot {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warn-primary);
+}
+
 .reading {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
